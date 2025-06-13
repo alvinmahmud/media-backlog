@@ -1,0 +1,25 @@
+{
+  "name": "media-backlog",
+  "version": "1.0.0",
+  "description": "A full stack MERN application to help you manage your backlog of movies, games, TV shows, or whatever!",
+  "main": "index.js",
+  "scripts": {
+    "frontend": "npm run dev --prefix frontend",
+    "backend": "npm run dev --prefix backend",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alvinmahmud/media-backlog.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/alvinmahmud/media-backlog/issues"
+  },
+  "homepage": "https://github.com/alvinmahmud/media-backlog#readme",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
