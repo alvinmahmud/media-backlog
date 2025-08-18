@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response, RequestHandler } from "express";
 import {
   createMediaItem,
   getAllMediaItems,
@@ -7,7 +7,7 @@ import {
   deleteMediaItem,
 } from "../services/mediaItemService";
 
-export const createMediaItemController = async (
+export const createMediaItemController: RequestHandler = async (
   req: Request,
   res: Response
 ) => {
@@ -19,7 +19,7 @@ export const createMediaItemController = async (
   }
 };
 
-export const getAllMediaItemsController = async (
+export const getAllMediaItemsController: RequestHandler = async (
   _req: Request,
   res: Response
 ) => {
@@ -31,14 +31,11 @@ export const getAllMediaItemsController = async (
   }
 };
 
-export const getMediaItemByIdController = async (
-  req: Request,
-  res: Response
-) => {
+export const getMediaItemByIdController: RequestHandler = async (req, res) => {
   try {
     const item = await getMediaItemById(req.params.id);
     if (!item) {
-      return res.status(404).json({ message: "Media not found!" });
+      res.status(404).json({ message: "Media not found!" });
     }
     res.json(item);
   } catch (error) {
@@ -46,14 +43,14 @@ export const getMediaItemByIdController = async (
   }
 };
 
-export const updateMediaItemController = async (
+export const updateMediaItemController: RequestHandler = async (
   req: Request,
   res: Response
 ) => {
   try {
     const updatedItem = await updateMediaItem(req.params.id, req.body);
     if (!updatedItem) {
-      return res.status(404).json({ message: "Media not found!" });
+      res.status(404).json({ message: "Media not found!" });
     }
     res.json(updatedItem);
   } catch (error) {
@@ -61,14 +58,14 @@ export const updateMediaItemController = async (
   }
 };
 
-export const deleteMediaItemController = async (
+export const deleteMediaItemController: RequestHandler = async (
   req: Request,
   res: Response
 ) => {
   try {
     const deletedItem = await deleteMediaItem(req.params.id);
     if (!deletedItem) {
-      return res.status(404).json({ message: "Media not found!" });
+      res.status(404).json({ message: "Media not found!" });
     }
     res.json({ message: "Media deleted!" });
   } catch (error) {
