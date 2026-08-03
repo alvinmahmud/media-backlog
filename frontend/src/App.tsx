@@ -89,23 +89,35 @@ function SignInScreen({
   initialError: string;
   onAuthenticated: (user: User) => void;
 }) {
-  const [name, setName] = useState("");
+  const [mode, setMode] = useState<"register" | "login">("register");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [error, setError] = useState(initialError);
   const [submitting, setSubmitting] = useState(false);
 
-  async function developmentSignIn(event: FormEvent) {
+  async function submitCredentials(event: FormEvent) {
     event.preventDefault();
+    if (mode === "register" && password !== passwordConfirmation) {
+      setError("Passwords do not match");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
-      const response = await authApi.development(name, email);
+      const response =
+        mode === "register"
+          ? await authApi.register(username, email, password)
+          : await authApi.login(email, password);
       onAuthenticated(response.user);
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Could not create the development account",
+          : mode === "register"
+            ? "Could not create your account"
+            : "Could not sign in",
       );
     } finally {
       setSubmitting(false);
@@ -162,50 +174,120 @@ function SignInScreen({
       <section className="auth-panel" aria-labelledby="sign-in-title">
         <div className="auth-card">
           <p className="section-kicker">Welcome in</p>
-          <h2 id="sign-in-title">Start your library</h2>
+          <h2 id="sign-in-title">
+            {mode === "register" ? "Start your library" : "Welcome back"}
+          </h2>
           <p className="auth-intro">
-            Sign in to keep your collection saved and private.
+            {mode === "register"
+              ? "Create an account to keep your collection saved and private."
+              : "Sign in to return to your saved collection."}
           </p>
 
           <GoogleButton onCredential={googleSignIn} />
           <div className="auth-divider">
-            <span>or use a development account</span>
+            <span>or continue with email</span>
           </div>
 
-          <form onSubmit={developmentSignIn} className="dev-account-form">
-            <div className="dev-notice">
-              <strong>Local testing</strong>
-              <span>
-                No password is required. This option is disabled in production.
-              </span>
-            </div>
-            <label className="field">
-              <span>Your name</span>
-              <input
-                required
-                minLength={2}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Alvin"
-              />
-            </label>
+          <div className="account-mode-tabs" aria-label="Account action">
+            <button
+              className={mode === "register" ? "active" : ""}
+              onClick={() => {
+                setMode("register");
+                setError("");
+              }}
+              type="button"
+            >
+              Create account
+            </button>
+            <button
+              className={mode === "login" ? "active" : ""}
+              onClick={() => {
+                setMode("login");
+                setError("");
+              }}
+              type="button"
+            >
+              Sign in
+            </button>
+          </div>
+
+          <form onSubmit={submitCredentials} className="account-form">
+            {mode === "register" && (
+              <label className="field">
+                <span>Username</span>
+                <input
+                  required
+                  minLength={3}
+                  maxLength={24}
+                  pattern="[A-Za-z0-9_]+"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="alvin_reads"
+                />
+                <small>3–24 letters, numbers, or underscores</small>
+              </label>
+            )}
             <label className="field">
               <span>Email</span>
               <input
                 required
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@example.com"
               />
             </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                required
+                type="password"
+                minLength={10}
+                maxLength={128}
+                autoComplete={
+                  mode === "register" ? "new-password" : "current-password"
+                }
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={
+                  mode === "register"
+                    ? "At least 10 characters"
+                    : "Your password"
+                }
+              />
+            </label>
+            {mode === "register" && (
+              <label className="field">
+                <span>Confirm password</span>
+                <input
+                  required
+                  type="password"
+                  minLength={10}
+                  maxLength={128}
+                  autoComplete="new-password"
+                  value={passwordConfirmation}
+                  onChange={(event) =>
+                    setPasswordConfirmation(event.target.value)
+                  }
+                  placeholder="Enter it once more"
+                />
+              </label>
+            )}
             {error && (
               <p className="form-error" role="alert">
                 {error}
               </p>
             )}
             <button className="add-button auth-submit" disabled={submitting}>
-              {submitting ? "Creating account…" : "Create development account"}
+              {submitting
+                ? mode === "register"
+                  ? "Creating account…"
+                  : "Signing in…"
+                : mode === "register"
+                  ? "Create account"
+                  : "Sign in"}
             </button>
           </form>
         </div>
@@ -393,10 +475,10 @@ function Library({
               <img src={user.picture} alt="" />
             ) : (
               <span className="account-initial">
-                {user.name.charAt(0).toUpperCase()}
+                {user.username.charAt(0).toUpperCase()}
               </span>
             )}
-            <span className="account-name">{user.name}</span>
+            <span className="account-name">{user.username}</span>
             <button onClick={signOut}>Sign out</button>
           </div>
           <button
@@ -411,7 +493,9 @@ function Library({
       <main id="top">
         <section className="hero">
           <div className="hero-copy">
-            <p className="eyebrow">{user.name}’s watch, read &amp; play list</p>
+            <p className="eyebrow">
+              {user.username}’s watch, read &amp; play list
+            </p>
             <h1>
               Keep the next great
               <br />

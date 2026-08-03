@@ -1,7 +1,7 @@
 export type User = {
   id: string;
   email: string;
-  name: string;
+  username: string;
   picture?: string;
 };
 
@@ -54,10 +54,15 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ credential }),
     }),
-  development: (name: string, email: string) =>
-    request<{ user: User; developmentAccount: true }>("/api/auth/development", {
+  register: (username: string, email: string, password: string) =>
+    request<{ user: User }>("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ name, email }),
+      body: JSON.stringify({ username, email, password }),
+    }),
+  login: (email: string, password: string) =>
+    request<{ user: User }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
     }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
 };
