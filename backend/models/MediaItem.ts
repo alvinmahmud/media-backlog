@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 
 const mediaItemSchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
     title: { type: String, required: true },
     type: {
       type: String,
@@ -14,9 +20,12 @@ const mediaItemSchema = new mongoose.Schema(
       default: "backlog",
     },
     notes: { type: String },
+    year: { type: String, match: /^\d{4}$/ },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
+
+mediaItemSchema.index({ user: 1, createdAt: -1 });
 
 const MediaItem = mongoose.model("MediaItem", mediaItemSchema);
 

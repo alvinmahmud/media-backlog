@@ -1,74 +1,117 @@
-import { Request, Response, RequestHandler } from "express";
+import { Request, Response } from "express";
 import {
   createMediaItem,
+  deleteMediaItem,
   getAllMediaItems,
   getMediaItemById,
   updateMediaItem,
-  deleteMediaItem,
 } from "../services/mediaItemService";
+import { AuthenticatedRequest } from "../middleware/auth";
 
-export const createMediaItemController: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    const newItem = await createMediaItem(req.body);
-    res.status(201).json(newItem);
-  } catch (error) {
-    res.status(500).json({ message: "Error creating new media: ", error });
+const mediaTypes = new Set(["movie", "tv", "book", "game"]);
+const statuses = new Set(["backlog", "in progress", "completed"]);
+
+function userId(req: Request) {
+  return (req as AuthenticatedRequest).auth.userId;
+}
+
+function mediaInput(body: unknown, partial = false) {
+  if (!body || typeof body !== "object") return null;
+  const value = body as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  if (!partial || value.title !== undefined) {
+    if (typeof value.title !== "string" || !value.title.trim()) return null;
+    result.title = value.title.trim();
   }
-};
-
-export const getAllMediaItemsController: RequestHandler = async (
-  _req: Request,
-  res: Response
-) => {
-  try {
-    const allItems = await getAllMediaItems();
-    res.json(allItems);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching medias: ", error });
+  if (!partial || value.type !== undefined) {
+    if (typeof value.type !== "string" || !mediaTypes.has(value.type))
+      return null;
+    result.type = value.type;
   }
-};
+  if (value.status !== undefined) {
+    if (typeof value.status !== "string" || !statuses.has(value.status))
+      return null;
+    result.status = value.status;
+  }
+  if (value.notes !== undefined) {
+    if (typeof value.notes !== "string") return null;
+    result.notes = value.notes.trim();
+  }
+  if (value.year !== undefined) {
+    if (
+      typeof value.year !== "string" ||
+      (value.year && !/^\d{4}$/.test(value.year))
+    )
+      return null;
+    result.year = value.year;
+  }
+  return result;
+}
 
-export const getMediaItemByIdController: RequestHandler = async (req, res) => {
+export async function createMediaItemController(req: Request, res: Response) {
   try {
-    const item = await getMediaItemById(req.params.id);
+    const input = mediaInput(req.body);
+    if (!input) {
+      res
+        .status(400)
+        .json({ message: "A valid title and media type are required" });
+      return;
+    }
+    res.status(201).json(await createMediaItem(userId(req), input));
+  } catch {
+    res.status(500).json({ message: "Could not create media item" });
+  }
+}
+
+export async function getAllMediaItemsController(req: Request, res: Response) {
+  try {
+    res.json(await getAllMediaItems(userId(req)));
+  } catch {
+    res.status(500).json({ message: "Could not fetch media items" });
+  }
+}
+
+export async function getMediaItemByIdController(req: Request, res: Response) {
+  try {
+    const item = await getMediaItemById(userId(req), req.params.id);
     if (!item) {
-      res.status(404).json({ message: "Media not found!" });
+      res.status(404).json({ message: "Media item not found" });
+      return;
     }
     res.json(item);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching media: ", error });
+  } catch {
+    res.status(400).json({ message: "Invalid media item ID" });
   }
-};
+}
 
-export const updateMediaItemController: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
+export async function updateMediaItemController(req: Request, res: Response) {
   try {
-    const updatedItem = await updateMediaItem(req.params.id, req.body);
-    if (!updatedItem) {
-      res.status(404).json({ message: "Media not found!" });
+    const input = mediaInput(req.body, true);
+    if (!input || Object.keys(input).length === 0) {
+      res.status(400).json({ message: "No valid media fields were supplied" });
+      return;
     }
-    res.json(updatedItem);
-  } catch (error) {
-    res.status(500).json({ message: "Error updating media: ", error });
+    const item = await updateMediaItem(userId(req), req.params.id, input);
+    if (!item) {
+      res.status(404).json({ message: "Media item not found" });
+      return;
+    }
+    res.json(item);
+  } catch {
+    res.status(400).json({ message: "Invalid media item ID" });
   }
-};
+}
 
-export const deleteMediaItemController: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
+export async function deleteMediaItemController(req: Request, res: Response) {
   try {
-    const deletedItem = await deleteMediaItem(req.params.id);
-    if (!deletedItem) {
-      res.status(404).json({ message: "Media not found!" });
+    const item = await deleteMediaItem(userId(req), req.params.id);
+    if (!item) {
+      res.status(404).json({ message: "Media item not found" });
+      return;
     }
-    res.json({ message: "Media deleted!" });
-  } catch (error) {
-    res.status(500).json({ message: "Error deleting media: ", error });
+    res.status(204).send();
+  } catch {
+    res.status(400).json({ message: "Invalid media item ID" });
   }
-};
+}

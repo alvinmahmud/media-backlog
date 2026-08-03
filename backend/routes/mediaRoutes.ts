@@ -4,10 +4,13 @@ import {
   getAllMediaItemsController,
   getMediaItemByIdController,
   updateMediaItemController,
-  deleteMediaItemController
+  deleteMediaItemController,
 } from "../controllers/mediaController";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
+
+router.use(requireAuth);
 
 router.get("/", getAllMediaItemsController);
 router.get("/:id", getMediaItemByIdController);

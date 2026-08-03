@@ -1,34 +1,54 @@
 import express, { Express, Request, Response } from "express";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import authRoutes from "../routes/authRoutes";
+import mediaRoutes from "../routes/mediaRoutes";
 
 dotenv.config();
 
 const app: Express = express();
+const allowedOrigins = (
+  process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173"
+)
+  .split(",")
+  .map((origin) => origin.trim());
 
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-const uri: string =
-  process.env.MONGODB_URI || "mongodb://localhost:27017/media-backlog";
-
-(async () => {
-  try {
-    await mongoose.connect(uri);
-    console.log("Connected to the database.");
-  } catch (error) {
-    console.error("Error:", error);
-  }
-})();
+app.use(
+  cors({
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+      else callback(new Error("Origin is not allowed by CORS"));
+    },
+  }),
+);
+app.use(express.json({ limit: "32kb" }));
+app.use(cookieParser());
 
 app.get("/health", (_req: Request, res: Response) => {
-  res.status(200).send("Server is running...");
+  res.status(mongoose.connection.readyState === 1 ? 200 : 503).json({
+    status: mongoose.connection.readyState === 1 ? "ok" : "degraded",
+  });
 });
+app.use("/api/auth", authRoutes);
+app.use("/api/media", mediaRoutes);
 
-const PORT: string | number = process.env.PORT || 3000;
+const uri =
+  process.env.MONGODB_URI || "mongodb://localhost:27017/media-backlog";
+const port = Number(process.env.PORT) || 3000;
 
-app.listen(PORT, () => {
-  console.log(`Server is running on PORT: ${PORT}`);
-});
+async function start() {
+  try {
+    await mongoose.connect(uri);
+    app.listen(port, () =>
+      console.log(`Media Backlog API listening on port ${port}`),
+    );
+  } catch (error) {
+    console.error("Could not start Media Backlog API", error);
+    process.exit(1);
+  }
+}
+
+void start();

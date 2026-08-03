@@ -1,22 +1,21 @@
 import MediaItem from "../models/MediaItem";
 
-export const createMediaItem = async (data: any) => {
-  const item = new MediaItem(data);
-  return await item.save();
-};
+export const createMediaItem = (
+  userId: string,
+  data: Record<string, unknown>,
+) => MediaItem.create({ ...data, user: userId });
 
-export const getAllMediaItems = async () => {
-  return await MediaItem.find();
-};
+export const getAllMediaItems = (userId: string) =>
+  MediaItem.find({ user: userId }).sort({ createdAt: -1 });
 
-export const getMediaItemById = async (id: string) => {
-  return await MediaItem.findById(id);
-};
+export const getMediaItemById = (userId: string, id: string) =>
+  MediaItem.findOne({ _id: id, user: userId });
 
-export const updateMediaItem = async (id: string, data: any) => {
-  return await MediaItem.findByIdAndUpdate(id, data, { new: true });
-};
+export const updateMediaItem = (
+  userId: string,
+  id: string,
+  data: Record<string, unknown>,
+) => MediaItem.findOneAndUpdate({ _id: id, user: userId }, data, { new: true });
 
-export const deleteMediaItem = async (id: string) => {
-  return await MediaItem.findByIdAndDelete(id);
-};
+export const deleteMediaItem = (userId: string, id: string) =>
+  MediaItem.findOneAndDelete({ _id: id, user: userId });

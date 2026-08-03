@@ -1,81 +1,24 @@
 import {
   type CSSProperties,
   type FormEvent,
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import {
+  ApiError,
+  authApi,
+  mediaApi,
+  type ApiMediaItem,
+  type User,
+} from "./api";
 import "./App.css";
 
-type MediaType = "movie" | "tv" | "book" | "game";
-type Status = "backlog" | "in progress" | "completed";
-type MediaItem = {
-  id: string;
-  title: string;
-  type: MediaType;
-  status: Status;
-  notes: string;
-  year?: string;
-  addedAt: number;
-};
-
-const STORAGE_KEY = "media-backlog-items";
-const starterItems: MediaItem[] = [
-  {
-    id: "starter-1",
-    title: "Perfect Days",
-    type: "movie",
-    status: "backlog",
-    notes: "Save for a quiet Sunday night.",
-    year: "2023",
-    addedAt: 6,
-  },
-  {
-    id: "starter-2",
-    title: "Severance",
-    type: "tv",
-    status: "in progress",
-    notes: "Season 1 · Episode 6",
-    year: "2022",
-    addedAt: 5,
-  },
-  {
-    id: "starter-3",
-    title: "Tomorrow, and Tomorrow, and Tomorrow",
-    type: "book",
-    status: "in progress",
-    notes: "About halfway through.",
-    year: "2022",
-    addedAt: 4,
-  },
-  {
-    id: "starter-4",
-    title: "Outer Wilds",
-    type: "game",
-    status: "backlog",
-    notes: "Go in without reading spoilers.",
-    year: "2019",
-    addedAt: 3,
-  },
-  {
-    id: "starter-5",
-    title: "The Bear",
-    type: "tv",
-    status: "completed",
-    notes: "Chaotic, tender, excellent.",
-    year: "2022",
-    addedAt: 2,
-  },
-  {
-    id: "starter-6",
-    title: "Past Lives",
-    type: "movie",
-    status: "completed",
-    notes: "A new favorite.",
-    year: "2023",
-    addedAt: 1,
-  },
-];
+type MediaType = ApiMediaItem["type"];
+type Status = ApiMediaItem["status"];
+type NewMediaItem = Omit<ApiMediaItem, "_id" | "createdAt">;
 
 const typeLabels: Record<MediaType, string> = {
   movie: "Film",
@@ -95,25 +38,275 @@ const statusLabels: Record<Status, string> = {
   completed: "Completed",
 };
 
-function loadItems() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? (JSON.parse(saved) as MediaItem[]) : starterItems;
-  } catch {
-    return starterItems;
+function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [sessionError, setSessionError] = useState("");
+
+  useEffect(() => {
+    authApi
+      .session()
+      .then(({ user: currentUser }) => setUser(currentUser))
+      .catch((error: unknown) => {
+        if (!(error instanceof ApiError) || error.status !== 401) {
+          setSessionError(
+            "The API is not reachable yet. Start the backend and try again.",
+          );
+        }
+      })
+      .finally(() => setCheckingSession(false));
+  }, []);
+
+  if (checkingSession) return <LoadingScreen />;
+  if (!user) {
+    return (
+      <SignInScreen
+        initialError={sessionError}
+        onAuthenticated={(authenticatedUser) => {
+          setSessionError("");
+          setUser(authenticatedUser);
+        }}
+      />
+    );
   }
+
+  return <Library user={user} onSignedOut={() => setUser(null)} />;
 }
 
-function App() {
-  const [items, setItems] = useState<MediaItem[]>(loadItems);
+function LoadingScreen() {
+  return (
+    <div className="loading-screen">
+      <span className="brand-mark">M</span>
+      <p>Opening your library…</p>
+    </div>
+  );
+}
+
+function SignInScreen({
+  initialError,
+  onAuthenticated,
+}: {
+  initialError: string;
+  onAuthenticated: (user: User) => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState(initialError);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function developmentSignIn(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      const response = await authApi.development(name, email);
+      onAuthenticated(response.user);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not create the development account",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const googleSignIn = useCallback(
+    async (credential: string) => {
+      setError("");
+      try {
+        const response = await authApi.google(credential);
+        onAuthenticated(response.user);
+      } catch (caught) {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Google sign-in could not be completed",
+        );
+      }
+    },
+    [onAuthenticated],
+  );
+
+  return (
+    <main className="auth-page">
+      <section className="auth-story">
+        <a
+          className="brand auth-brand"
+          href="/"
+          aria-label="Media Backlog home"
+        >
+          <span className="brand-mark" aria-hidden="true">
+            M
+          </span>
+          <span>Media Backlog</span>
+        </a>
+        <div>
+          <p className="eyebrow">Your personal watch, read &amp; play list</p>
+          <h1>
+            Every story
+            <br />
+            has its moment.
+          </h1>
+          <p>
+            Keep the recommendations that matter, make space for what’s next,
+            and carry your library between devices.
+          </p>
+        </div>
+        <p className="auth-footnote">
+          A quiet home for films, series, books, and games.
+        </p>
+      </section>
+
+      <section className="auth-panel" aria-labelledby="sign-in-title">
+        <div className="auth-card">
+          <p className="section-kicker">Welcome in</p>
+          <h2 id="sign-in-title">Start your library</h2>
+          <p className="auth-intro">
+            Sign in to keep your collection saved and private.
+          </p>
+
+          <GoogleButton onCredential={googleSignIn} />
+          <div className="auth-divider">
+            <span>or use a development account</span>
+          </div>
+
+          <form onSubmit={developmentSignIn} className="dev-account-form">
+            <div className="dev-notice">
+              <strong>Local testing</strong>
+              <span>
+                No password is required. This option is disabled in production.
+              </span>
+            </div>
+            <label className="field">
+              <span>Your name</span>
+              <input
+                required
+                minLength={2}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Alvin"
+              />
+            </label>
+            <label className="field">
+              <span>Email</span>
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+              />
+            </label>
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button className="add-button auth-submit" disabled={submitting}>
+              {submitting ? "Creating account…" : "Create development account"}
+            </button>
+          </form>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function GoogleButton({
+  onCredential,
+}: {
+  onCredential: (credential: string) => void;
+}) {
+  const buttonRef = useRef<HTMLDivElement>(null);
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+  useEffect(() => {
+    if (!clientId || !buttonRef.current) return;
+    const render = () => {
+      if (!window.google || !buttonRef.current) return;
+      buttonRef.current.replaceChildren();
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => onCredential(response.credential),
+      });
+      window.google.accounts.id.renderButton(buttonRef.current, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        shape: "pill",
+        width: Math.min(360, buttonRef.current.clientWidth || 360),
+      });
+    };
+
+    const existing = document.getElementById(
+      "google-identity-script",
+    ) as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", render);
+      render();
+      return () => existing.removeEventListener("load", render);
+    }
+
+    const script = document.createElement("script");
+    script.id = "google-identity-script";
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.addEventListener("load", render);
+    document.head.appendChild(script);
+    return () => script.removeEventListener("load", render);
+  }, [clientId, onCredential]);
+
+  if (!clientId) {
+    return (
+      <div className="google-pending">
+        <span className="google-g">G</span>
+        <span>
+          <strong>Google sign-in</strong>
+          <small>Add a client ID to enable</small>
+        </span>
+        <span className="pending-pill">Setup pending</span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="google-button"
+      ref={buttonRef}
+      aria-label="Sign in with Google"
+    />
+  );
+}
+
+function Library({
+  user,
+  onSignedOut,
+}: {
+  user: User;
+  onSignedOut: () => void;
+}) {
+  const [items, setItems] = useState<ApiMediaItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<MediaType | "all">("all");
   const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
   const [isAdding, setIsAdding] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [items]);
+    mediaApi
+      .list()
+      .then(setItems)
+      .catch((caught) =>
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not load your library",
+        ),
+      )
+      .finally(() => setLoading(false));
+  }, []);
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -124,9 +317,8 @@ function App() {
         (item) =>
           !query ||
           item.title.toLowerCase().includes(query) ||
-          item.notes.toLowerCase().includes(query),
-      )
-      .sort((a, b) => b.addedAt - a.addedAt);
+          (item.notes || "").toLowerCase().includes(query),
+      );
   }, [items, search, typeFilter, statusFilter]);
 
   const counts = useMemo(
@@ -140,19 +332,50 @@ function App() {
     [items],
   );
 
-  function addItem(item: Omit<MediaItem, "id" | "addedAt">) {
-    const id =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `item-${Date.now()}`;
-    setItems((current) => [...current, { ...item, id, addedAt: Date.now() }]);
-    setIsAdding(false);
+  async function addItem(item: NewMediaItem) {
+    try {
+      const created = await mediaApi.create(item);
+      setItems((current) => [created, ...current]);
+      setIsAdding(false);
+      setError("");
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : "Could not save this item";
+      setError(message);
+      throw caught;
+    }
   }
 
-  function updateStatus(id: string, status: Status) {
-    setItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, status } : item)),
-    );
+  async function updateStatus(id: string, status: Status) {
+    try {
+      const updated = await mediaApi.update(id, { status });
+      setItems((current) =>
+        current.map((item) => (item._id === id ? updated : item)),
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not update the item",
+      );
+    }
+  }
+
+  async function removeItem(id: string) {
+    try {
+      await mediaApi.remove(id);
+      setItems((current) => current.filter((item) => item._id !== id));
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not remove the item",
+      );
+    }
+  }
+
+  async function signOut() {
+    try {
+      await authApi.logout();
+    } finally {
+      onSignedOut();
+    }
   }
 
   return (
@@ -164,26 +387,39 @@ function App() {
           </span>
           <span>Media Backlog</span>
         </a>
-        <button
-          className="add-button compact"
-          onClick={() => setIsAdding(true)}
-        >
-          <span aria-hidden="true">＋</span> Add media
-        </button>
+        <div className="topbar-actions">
+          <div className="account-chip">
+            {user.picture ? (
+              <img src={user.picture} alt="" />
+            ) : (
+              <span className="account-initial">
+                {user.name.charAt(0).toUpperCase()}
+              </span>
+            )}
+            <span className="account-name">{user.name}</span>
+            <button onClick={signOut}>Sign out</button>
+          </div>
+          <button
+            className="add-button compact"
+            onClick={() => setIsAdding(true)}
+          >
+            <span aria-hidden="true">＋</span> Add media
+          </button>
+        </div>
       </header>
 
       <main id="top">
         <section className="hero">
           <div className="hero-copy">
-            <p className="eyebrow">Your personal watch, read &amp; play list</p>
+            <p className="eyebrow">{user.name}’s watch, read &amp; play list</p>
             <h1>
               Keep the next great
               <br />
               story close.
             </h1>
             <p className="hero-description">
-              One calm place for everything you want to experience—without
-              losing the recommendations that caught your attention.
+              Your collection now lives with your account, ready whenever
+              inspiration strikes.
             </p>
           </div>
           <div className="hero-stats" aria-label="Backlog summary">
@@ -205,7 +441,7 @@ function App() {
         <section className="library" aria-labelledby="library-title">
           <div className="section-heading">
             <div>
-              <p className="section-kicker">The collection</p>
+              <p className="section-kicker">Saved to your account</p>
               <h2 id="library-title">My library</h2>
             </div>
             <label className="search-field">
@@ -218,7 +454,14 @@ function App() {
               />
             </label>
           </div>
-
+          {error && (
+            <div className="api-message" role="alert">
+              {error}
+              <button onClick={() => setError("")} aria-label="Dismiss">
+                ×
+              </button>
+            </div>
+          )}
           <div className="filter-row">
             <div className="status-tabs" aria-label="Filter by status">
               {(["all", "backlog", "in progress", "completed"] as const).map(
@@ -251,12 +494,14 @@ function App() {
             </label>
           </div>
 
-          {filteredItems.length ? (
+          {loading ? (
+            <div className="library-loading">Loading your collection…</div>
+          ) : filteredItems.length ? (
             <div className="media-grid">
               {filteredItems.map((item, index) => (
                 <article
                   className={`media-card tone-${item.type}`}
-                  key={item.id}
+                  key={item._id}
                   style={{ "--delay": `${index * 45}ms` } as CSSProperties}
                 >
                   <div className="card-visual" aria-hidden="true">
@@ -280,7 +525,7 @@ function App() {
                           className={`status-select status-${item.status.replace(" ", "-")}`}
                           value={item.status}
                           onChange={(event) =>
-                            updateStatus(item.id, event.target.value as Status)
+                            updateStatus(item._id, event.target.value as Status)
                           }
                         >
                           <option value="backlog">Backlog</option>
@@ -290,11 +535,7 @@ function App() {
                       </label>
                       <button
                         className="remove-button"
-                        onClick={() =>
-                          setItems((current) =>
-                            current.filter((entry) => entry.id !== item.id),
-                          )
-                        }
+                        onClick={() => removeItem(item._id)}
                         aria-label={`Remove ${item.title}`}
                         title="Remove item"
                       >
@@ -308,8 +549,14 @@ function App() {
           ) : (
             <div className="empty-state">
               <span aria-hidden="true">◎</span>
-              <h3>No stories found</h3>
-              <p>Try a different filter, or add something new to your list.</p>
+              <h3>
+                {items.length ? "No stories found" : "Your shelf is ready"}
+              </h3>
+              <p>
+                {items.length
+                  ? "Try a different filter, or add something new to your list."
+                  : "Add the first film, series, book, or game you don’t want to forget."}
+              </p>
               <button className="text-button" onClick={() => setIsAdding(true)}>
                 Add a title
               </button>
@@ -317,10 +564,9 @@ function App() {
           )}
         </section>
       </main>
-
       <footer>
         <span>Media Backlog</span>
-        <p>A little shelf for the stories you don’t want to forget.</p>
+        <p>Signed in as {user.email}</p>
       </footer>
       {isAdding && (
         <AddMediaDialog onAdd={addItem} onClose={() => setIsAdding(false)} />
@@ -333,7 +579,7 @@ function AddMediaDialog({
   onAdd,
   onClose,
 }: {
-  onAdd: (item: Omit<MediaItem, "id" | "addedAt">) => void;
+  onAdd: (item: NewMediaItem) => Promise<void>;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState("");
@@ -341,17 +587,23 @@ function AddMediaDialog({
   const [status, setStatus] = useState<Status>("backlog");
   const [year, setYear] = useState("");
   const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function submit(event: FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
-    if (title.trim())
-      onAdd({
+    if (!title.trim()) return;
+    setSaving(true);
+    try {
+      await onAdd({
         title: title.trim(),
         type,
         status,
         year: year.trim(),
         notes: notes.trim(),
       });
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -382,7 +634,7 @@ function AddMediaDialog({
               autoFocus
               required
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(event) => setTitle(event.target.value)}
               placeholder="e.g. The Left Hand of Darkness"
             />
           </label>
@@ -391,7 +643,7 @@ function AddMediaDialog({
               <span>Media type</span>
               <select
                 value={type}
-                onChange={(e) => setType(e.target.value as MediaType)}
+                onChange={(event) => setType(event.target.value as MediaType)}
               >
                 <option value="movie">Film</option>
                 <option value="tv">Series</option>
@@ -403,7 +655,7 @@ function AddMediaDialog({
               <span>Status</span>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as Status)}
+                onChange={(event) => setStatus(event.target.value as Status)}
               >
                 <option value="backlog">Backlog</option>
                 <option value="in progress">In progress</option>
@@ -419,7 +671,9 @@ function AddMediaDialog({
               inputMode="numeric"
               maxLength={4}
               value={year}
-              onChange={(e) => setYear(e.target.value.replace(/\D/g, ""))}
+              onChange={(event) =>
+                setYear(event.target.value.replace(/\D/g, ""))
+              }
               placeholder="2024"
             />
           </label>
@@ -429,7 +683,7 @@ function AddMediaDialog({
             </span>
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(event) => setNotes(event.target.value)}
               placeholder="Why did this catch your eye?"
               rows={3}
             />
@@ -438,8 +692,8 @@ function AddMediaDialog({
             <button type="button" className="cancel-button" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="add-button">
-              Add to library
+            <button type="submit" className="add-button" disabled={saving}>
+              {saving ? "Saving…" : "Add to library"}
             </button>
           </div>
         </form>
