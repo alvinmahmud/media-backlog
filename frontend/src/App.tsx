@@ -3,10 +3,12 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { Eye, EyeOff, Plus, Search, X } from "lucide-react";
 import {
   ApiError,
   authApi,
@@ -94,8 +96,17 @@ function SignInScreen({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] =
+    useState(false);
   const [error, setError] = useState(initialError);
   const [submitting, setSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [formHeight, setFormHeight] = useState(430);
+
+  useLayoutEffect(() => {
+    if (formRef.current) setFormHeight(formRef.current.scrollHeight);
+  }, [mode, error]);
 
   async function submitCredentials(event: FormEvent) {
     event.preventDefault();
@@ -211,85 +222,137 @@ function SignInScreen({
             </button>
           </div>
 
-          <form onSubmit={submitCredentials} className="account-form">
-            {mode === "register" && (
+          <div className="account-form-shell" style={{ height: formHeight }}>
+            <form
+              key={mode}
+              ref={formRef}
+              onSubmit={submitCredentials}
+              className={`account-form ${mode}`}
+            >
+              {mode === "register" && (
+                <label className="field">
+                  <span>Username</span>
+                  <input
+                    required
+                    minLength={3}
+                    maxLength={24}
+                    pattern="[A-Za-z0-9_]+"
+                    autoComplete="username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="Enter a username"
+                  />
+                  <small>3–24 letters, numbers, or underscores</small>
+                </label>
+              )}
               <label className="field">
-                <span>Username</span>
+                <span>Email</span>
                 <input
                   required
-                  minLength={3}
-                  maxLength={24}
-                  pattern="[A-Za-z0-9_]+"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="alvin_reads"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="Enter your email address"
                 />
-                <small>3–24 letters, numbers, or underscores</small>
               </label>
-            )}
-            <label className="field">
-              <span>Email</span>
-              <input
-                required
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-              />
-            </label>
-            <label className="field">
-              <span>Password</span>
-              <input
-                required
-                type="password"
-                minLength={10}
-                maxLength={128}
-                autoComplete={
-                  mode === "register" ? "new-password" : "current-password"
-                }
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={
-                  mode === "register"
-                    ? "At least 10 characters"
-                    : "Your password"
-                }
-              />
-            </label>
-            {mode === "register" && (
               <label className="field">
-                <span>Confirm password</span>
-                <input
-                  required
-                  type="password"
-                  minLength={10}
-                  maxLength={128}
-                  autoComplete="new-password"
-                  value={passwordConfirmation}
-                  onChange={(event) =>
-                    setPasswordConfirmation(event.target.value)
-                  }
-                  placeholder="Enter it once more"
-                />
+                <span>Password</span>
+                <div className="password-field">
+                  <input
+                    required
+                    type={showPassword ? "text" : "password"}
+                    minLength={10}
+                    maxLength={128}
+                    autoComplete={
+                      mode === "register" ? "new-password" : "current-password"
+                    }
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder={
+                      mode === "register"
+                        ? "Create a password"
+                        : "Enter your password"
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? (
+                      <EyeOff size={20} strokeWidth={1.8} aria-hidden="true" />
+                    ) : (
+                      <Eye size={20} strokeWidth={1.8} aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                {mode === "register" && (
+                  <small>Use at least 10 characters</small>
+                )}
               </label>
-            )}
-            {error && (
-              <p className="form-error" role="alert">
-                {error}
-              </p>
-            )}
-            <button className="add-button auth-submit" disabled={submitting}>
-              {submitting
-                ? mode === "register"
-                  ? "Creating account…"
-                  : "Signing in…"
-                : mode === "register"
-                  ? "Create account"
-                  : "Sign in"}
-            </button>
-          </form>
+              {mode === "register" && (
+                <label className="field">
+                  <span>Confirm password</span>
+                  <div className="password-field">
+                    <input
+                      required
+                      type={showPasswordConfirmation ? "text" : "password"}
+                      minLength={10}
+                      maxLength={128}
+                      autoComplete="new-password"
+                      value={passwordConfirmation}
+                      onChange={(event) =>
+                        setPasswordConfirmation(event.target.value)
+                      }
+                      placeholder="Confirm your password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() =>
+                        setShowPasswordConfirmation((visible) => !visible)
+                      }
+                      aria-label={
+                        showPasswordConfirmation
+                          ? "Hide confirmed password"
+                          : "Show confirmed password"
+                      }
+                      aria-pressed={showPasswordConfirmation}
+                    >
+                      {showPasswordConfirmation ? (
+                        <EyeOff
+                          size={20}
+                          strokeWidth={1.8}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Eye size={20} strokeWidth={1.8} aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                </label>
+              )}
+              {error && (
+                <p className="form-error" role="alert">
+                  {error}
+                </p>
+              )}
+              <button className="add-button auth-submit" disabled={submitting}>
+                {submitting
+                  ? mode === "register"
+                    ? "Creating account…"
+                    : "Signing in…"
+                  : mode === "register"
+                    ? "Create account"
+                    : "Sign in"}
+              </button>
+            </form>
+          </div>
         </div>
       </section>
     </main>
@@ -343,12 +406,13 @@ function GoogleButton({
   if (!clientId) {
     return (
       <div className="google-pending">
-        <span className="google-g">G</span>
-        <span>
-          <strong>Google sign-in</strong>
-          <small>Add a client ID to enable</small>
-        </span>
-        <span className="pending-pill">Setup pending</span>
+        <img
+          className="google-g"
+          src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+          alt=""
+        />
+        <strong>Sign in with Google</strong>
+        <span className="pending-pill">Coming soon</span>
       </div>
     );
   }
@@ -485,7 +549,7 @@ function Library({
             className="add-button compact"
             onClick={() => setIsAdding(true)}
           >
-            <span aria-hidden="true">＋</span> Add media
+            <Plus size={17} strokeWidth={2} aria-hidden="true" /> Add media
           </button>
         </div>
       </header>
@@ -529,7 +593,7 @@ function Library({
               <h2 id="library-title">My library</h2>
             </div>
             <label className="search-field">
-              <span aria-hidden="true">⌕</span>
+              <Search size={19} strokeWidth={1.8} aria-hidden="true" />
               <span className="sr-only">Search your library</span>
               <input
                 value={search}
@@ -542,7 +606,7 @@ function Library({
             <div className="api-message" role="alert">
               {error}
               <button onClick={() => setError("")} aria-label="Dismiss">
-                ×
+                <X size={17} aria-hidden="true" />
               </button>
             </div>
           )}
@@ -623,7 +687,7 @@ function Library({
                         aria-label={`Remove ${item.title}`}
                         title="Remove item"
                       >
-                        ×
+                        <X size={17} aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -704,7 +768,7 @@ function AddMediaDialog({
           onClick={onClose}
           aria-label="Close dialog"
         >
-          ×
+          <X size={21} aria-hidden="true" />
         </button>
         <p className="section-kicker">Grow your collection</p>
         <h2 id="dialog-title">Add something new</h2>
